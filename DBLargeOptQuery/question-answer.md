@@ -10,12 +10,27 @@ Dựa trên cấu trúc cơ sở dữ liệu gồm các bảng: `categories`, `p
 
 ## I. TRUY VẤN DỮ LIỆU TỔNG QUÁT
 
-1. Liệt kê toàn bộ sản phẩm và tên danh mục tương ứng:
+1. Lấy danh sách các sản phẩm có giá lớn hơn 10.5, gồm các danh mục và đánh giá tương ứng:
    ```sql
-   SELECT p.name, c.name 
-   FROM products p
-   JOIN categories c ON p.category_id = c.id;
+      EXPLAIN (ANALYZE, BUFFERS)
+      SELECT p.*, c.name, r.*
+      FROM products p
+      JOIN categories c ON p.category_id = c.id
+      JOIN reviews r ON p.id = r.product_id
+      WHERE p.price > 10.5;
     ```
+
+   ```
+                           [1] Nested Loop
+                          /            \
+               [2] Hash Join         [6] Memoize
+                 /        \              \
+     [3] Seq Scan    [4] Hash         [7] Index Scan
+     on reviews         /             on categories (id = p.category_id)      /
+                
+                [5] Seq Scan
+            on products (price > 10.5)
+   ```
 
 2. Tìm tất cả sản phẩm có `price > 500`, sắp xếp theo giá giảm dần.
 
