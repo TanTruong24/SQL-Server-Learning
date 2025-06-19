@@ -17,14 +17,23 @@ CREATE TABLE products (
     category_id INTEGER REFERENCES categories(id)
 );
 
--- 3. Bảng đơn hàng
+-- 3. Bảng khách hàng
+CREATE TABLE customers (
+    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT UNIQUE,
+    phone TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 4. Bảng đơn hàng (đã sửa customer_name -> customer_id)
 CREATE TABLE orders (
     id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    customer_name TEXT NOT NULL,
+    customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
     order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 4. Bảng trung gian: sản phẩm trong đơn hàng
+-- 5. Bảng trung gian: sản phẩm trong đơn hàng
 CREATE TABLE order_items (
     order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE,
     product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
@@ -32,7 +41,7 @@ CREATE TABLE order_items (
     PRIMARY KEY (order_id, product_id)
 );
 
--- 5. Bảng đánh giá sản phẩm
+-- 6. Bảng đánh giá sản phẩm
 CREATE TABLE reviews (
     id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
@@ -40,4 +49,3 @@ CREATE TABLE reviews (
     comment TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-

@@ -85,12 +85,97 @@ WHERE id NOT IN (SELECT product_id FROM order_items);
 ## IV. JOIN PHỨC TẠP / LỒNG NHAU
 
 15. Top 5 khách hàng mua nhiều sản phẩm nhất (theo quantity).
+   ```sql
+   select c.id, c.name, sum(oi.quantity) as purchase_quantity from customers c 
+   join orders o on o.customer_id = c.id
+   join order_items oi on oi.order_id = o.id
+   group by c.id 
+   order by purchase_quantity desc
+   limit 5;
+   ```
+   ```
+                              [Limit]             -- LIMIT 5
+                              |
+                              [Sort]              -- ORDER BY purchase_quantity DESC
+                                 |
+                              [Aggregate]         -- GROUP BY c.id, SUM(oi.quantity)
+                                 |
+                              [Hash Join]         -- ON o.customer_id = c.id
+                              /           \                  
+               [Hash Join]                [Hash]
+               /           \                 |
+   [Seq Scan] order_items    [Hash]         [Seq Scan] customers
+   (oi.order_id = o.id)         |        
+                        [Seq Scan] orders         
+   ```
 
 16. Sản phẩm tạo ra doanh thu cao nhất.
 
+   - Query có vấn đề?
+   ```sql
+   select p.*, sum(oi.quantity)*p.price as revenue from products p 
+   join order_items oi on oi.product_id = p.id
+   group by p.id
+   order by revenue desc
+   limit 1
+   ```
+
+   => Trong PostgreSQL, khi bạn SELECT p.* và GROUP BY p.id, các cột khác của products phải là hàm tổng hợp hoặc nằm trong GROUP BY (trừ khi có GROUP BY p.*, nhưng đó không phải chuẩn ANSI và dễ gây lỗi nếu dùng ORM).
+   PostgreSQL sẽ báo lỗi: column "p.name" must appear in the GROUP BY clause or be used in an aggregate function
+
+   ```sql
+   SELECT 
+    p.id, p.name, p.description, p.price, 
+      SUM(oi.quantity) * p.price AS revenue
+   FROM products p
+   JOIN order_items oi ON oi.product_id = p.id
+   GROUP BY p.id, p.name, p.description, p.price
+   ORDER BY revenue DESC
+   LIMIT 1;
+   ```
+
 17. Tổng số đơn hàng cho mỗi danh mục:
 
-* Join `products`, `order_items`, `orders`
+   ```sql
+   select c."name", count(oi.order_id) as total_order from products p 
+   join categories c on p.category_id = c.id
+   join order_items oi on p.id = oi.product_id
+   where exists (
+      select 1 
+      from orders o 
+      where o.id = oi.order_id
+   )
+   group by c."name" 
+   ```
+
+   ```sql
+   select c."name", count(oi.order_id) as total_order from products p 
+   join categories c on p.category_id = c.id
+   join order_items oi on p.id = oi.product_id
+   join orders o on o.id = oi.order_id
+   group by c."name" 
+   ```
+
+   ```
+      [Aggregate]
+      |
+   [Hash Join]  (oi.order_id = o.id)
+      /    \
+   [Nested Loop]         [Hash]
+      /     \              |
+   [Hash Join]        [Seq Scan]
+      /    \              orders
+   [Seq Scan] [Hash]
+   order_items    |
+               [Seq Scan]
+               products
+                  |
+               [Memoize]
+                     |
+               [Index Scan]
+                  categories
+
+   ```
 
 18. Tìm tất cả sản phẩm có rating thấp nhất trong hệ thống.
 
