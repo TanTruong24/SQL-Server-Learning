@@ -302,8 +302,35 @@
 
 11. **Tính tổng doanh thu mỗi ngày trong 1 tháng gần nhất (bao gồm `quantity * price`).**
 12. **Tìm đơn hàng có nhiều sản phẩm nhất và tổng số tiền cao nhất.**
+   ```sql
+   select o.*, count(oi.product_id) as total_product, sum(oi.quantity*p.price) as total_money
+   from orders o 
+   join order_items oi on oi.order_id = o.id
+   join products p on p.id = oi.product_id
+   group by o.id
+   order by total_product desc, total_money desc
+   limit 1
+   ```
 13. **Tìm các đơn hàng có ít nhất 1 sản phẩm trùng với wishlist của khách hàng đó.**
+   ```sql
+   select o.*
+   from orders o
+   join order_items oi on oi.order_id = o.id
+   where oi.product_id in (
+      select w.product_id
+      from wishlists w
+      where w.customer_id = o.customer_id
+   )
+   ```
 14. **Tính trung bình số sản phẩm mỗi đơn theo từng khách hàng.**
+   ```sql
+   select o.*,
+		count(oi.product_id) / count(distinct oi.order_id) as avg_product_order
+   from orders o
+   join order_items oi on oi.order_id = o.id
+   group by o.customer_id, o.id
+   order by avg_product_order desc
+   ```
 15. **Tìm đơn hàng có thời gian giao hàng dài nhất so với ngày đặt hàng.**
 
 ---
