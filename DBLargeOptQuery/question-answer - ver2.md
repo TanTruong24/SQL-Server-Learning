@@ -301,9 +301,22 @@
 ### ĐƠN HÀNG VÀ CHI TIẾT ĐƠN
 
 11. **Tính tổng doanh thu mỗi ngày trong 1 tháng gần nhất (bao gồm `quantity * price`).**
+   ```sql
+   select o.order_date,
+		sum(oi.quantity * p.price) as revenue
+   from orders o
+   join order_items oi on oi.order_id  = o.id
+   join products p on p.id = oi.product_id
+   where extract(month from o.order_date) = extract(month from current_date)
+      and extract(year from o.order_date) = extract(year from current_date)
+   group by o.order_date
+   order by o.order_date 
+   ```
 12. **Tìm đơn hàng có nhiều sản phẩm nhất và tổng số tiền cao nhất.**
    ```sql
-   select o.*, count(oi.product_id) as total_product, sum(oi.quantity*p.price) as total_money
+   select o.*, 
+      sum(oi.quantity) as total_product, 
+      sum(oi.quantity*p.price) as total_money
    from orders o 
    join order_items oi on oi.order_id = o.id
    join products p on p.id = oi.product_id
@@ -324,15 +337,24 @@
    ```
 14. **Tính trung bình số sản phẩm mỗi đơn theo từng khách hàng.**
    ```sql
-   select o.*,
-		count(oi.product_id) / count(distinct oi.order_id) as avg_product_order
-   from orders o
-   join order_items oi on oi.order_id = o.id
-   group by o.customer_id, o.id
-   order by avg_product_order desc
+   select o.customer_id, 
+         avg(sub.total_quantity) as avg_product_order
+   from (
+      select o.id, o.customer_id, sum(oi.quantity) as total_quantity
+      from orders o
+      join order_items oi on oi.order_id = o.id
+      group by o.id, o.customer_id
+   ) sub
+   group by sub.customer_id
    ```
 15. **Tìm đơn hàng có thời gian giao hàng dài nhất so với ngày đặt hàng.**
-
+   ```sql
+   select o.*, (s.delivery_date - o.order_date) as time_shipping
+   from orders o
+   join shippings s on s.order_id = o.id
+   order by time_shipping desc
+   limit 1
+   ```
 ---
 
 ### VẬN CHUYỂN & THANH TOÁN
