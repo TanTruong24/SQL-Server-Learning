@@ -360,9 +360,117 @@
 ### VẬN CHUYỂN & THANH TOÁN
 
 16. **Thống kê số lượng đơn theo `shipping_status` và phương thức thanh toán.**
+   ```sql
+   select s.shipping_status, pm.name,  count(*) as quantity_order
+   from shippings s 
+   join orders o on o.id = s.order_id
+   join payment_methods pm on pm.id = o.payment_method_id
+   group by s.shipping_status, pm.name
+   ```
 17. **Tính tổng chi phí vận chuyển theo carrier và theo từng tháng.**
+   ```sql
+   select c.name, 
+		c.code, 
+		 TO_CHAR(s.shipped_date, 'YYYY-MM') AS month,
+		 sum(s.shipping_cost) as total_cost
+   from shippings s 
+   join carriers c on c.id = s.carrier_id
+   group by c.name, c.code, month
+   order by month desc
+   ```
+
+   **Lưu ý?**
+   - Mặc dù PostgreSQL cho phép, việc dùng alias trong GROUP BY vẫn không được khuyến khích trong code production lớn vì:
+   - Dễ gây lỗi khi alias bị đổi tên
+   - Không tương thích nếu chuyển DBMS (sang MySQL, SQL Server...)
+   - Một số công cụ BI/reporting (như Metabase, Tableau) vẫn gợi ý dùng biểu thức gốc
+
+   ```sql
+   select c.name, 
+		c.code, 
+		 TO_CHAR(s.shipped_date, 'YYYY-MM') AS month,
+		 sum(s.shipping_cost) as total_cost
+   from shippings s 
+   join carriers c on c.id = s.carrier_id
+   group by c.name, 
+         c.code, 
+         TO_CHAR(s.shipped_date, 'YYYY-MM')
+   order by month desc
+   ```
+
 18. **Tính thời gian giao hàng trung bình theo carrier và nhóm khách hàng.**
+   ```sql
+   select c.name, 
+		c.code,
+		cs.name,
+		avg(s.delivery_date - s.shipped_date) as avg_delivery
+   from shippings s 
+   join carriers c on c.id = s.carrier_id
+   join orders o on o.id = s.order_id
+   join customers cs on cs.id = o.customer_id
+   group by c.name, 
+         c.code, 
+         cs.id,
+         cs.name
+   order by avg_delivery desc
+   ```
+   **Nguyên nhân gây chậm**
+   - GROUP BY nhiều cột (gồm cả cs.name) → PostgreSQL cần xử lý dữ liệu tạm nhiều hơn
+   - AVG(delivery_date - shipped_date) trên nhiều dòng không tối ưu được push-down
+
+   ```sql
+   select c.name, 
+		c.code,
+		cs.name,
+		AVG(DATE_PART('day', s.delivery_date - s.shipped_date)) AS avg_days
+   from shippings s 
+   join carriers c on c.id = s.carrier_id
+   join orders o on o.id = s.order_id
+   join customers cs on cs.id = o.customer_id
+   group by c.name, 
+         c.code, 
+         cs.id
+   order by avg_days desc
+   ```
+
 19. **Tìm những đơn hàng giao sai hẹn (giao sau hơn 5 ngày từ order\_date).**
+   ```sql
+   select     
+	o.*, 
+    s.delivery_date, 
+    DATE_PART('day', s.delivery_date - o.order_date) AS days_diff
+   from orders o
+   join shippings s on s.order_id = o.id
+   where DATE_PART('day', s.delivery_date - o.order_date) > 5
+   order by days_diff 
+   ```
+   
+   **Gợi ý mở rộng thêm (tuỳ chọn)**
+
+   a. Tính riêng thời gian xử lý nội bộ và vận chuyển:
+   ```sql
+   DATE_PART('day', s.shipped_date - o.order_date) AS handling_days,
+   DATE_PART('day', s.delivery_date - s.shipped_date) AS shipping_days
+   ```
+   → Cho phép phân tích:
+   - Trễ do khâu nội bộ xử lý (handling_days)
+   - Hay do đơn vị vận chuyển (shipping_days)
+
+   ```sql
+   SELECT 
+    o.id AS order_id,
+    o.order_date,
+    s.shipped_date,
+    s.delivery_date,
+    DATE_PART('day', s.delivery_date - o.order_date) AS total_days,
+    DATE_PART('day', s.shipped_date - o.order_date) AS handling_days,
+    DATE_PART('day', s.delivery_date - s.shipped_date) AS shipping_days
+   FROM orders o
+   JOIN shippings s ON s.order_id = o.id
+   WHERE DATE_PART('day', s.delivery_date - o.order_date) > 5
+   ORDER BY total_days ;
+   ```
+
 20. **Phân tích xu hướng giao hàng (số đơn trễ, sớm, đúng hạn) theo tuần.**
 
 ---

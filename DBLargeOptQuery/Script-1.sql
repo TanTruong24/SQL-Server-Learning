@@ -52,19 +52,6 @@ CREATE TABLE reviews (
     FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
 );
 
--- Quản lý giao hàng
-CREATE TABLE shippings (
-    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    order_id INT NOT NULL,
-    shipping_status VARCHAR(50) NOT NULL,
-    shipped_date TIMESTAMP,
-    delivery_date TIMESTAMP,
-    shipping_cost NUMERIC(10,2),
-    carrier VARCHAR(100),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
-);
 
 
 -- Danh sách yêu thích của khách hàng
@@ -90,3 +77,26 @@ ALTER TABLE orders
 ADD COLUMN payment_method_id INT,
 ADD CONSTRAINT fk_orders_payment_method
     FOREIGN KEY (payment_method_id) REFERENCES payment_methods(id);
+
+-- Danh sách đơn vị vận chuyển
+CREATE TABLE carriers (
+    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    code VARCHAR(20) NOT NULL UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Quản lý giao hàng
+CREATE TABLE shippings (
+    id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    order_id INT NOT NULL,
+    shipping_status VARCHAR(50) NOT NULL,
+    shipped_date TIMESTAMP,
+    delivery_date TIMESTAMP,
+    shipping_cost NUMERIC(10,2),
+    carrier_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE cascade,
+    FOREIGN KEY (carrier_id) REFERENCES carriers(id) ON DELETE CASCADE
+);
