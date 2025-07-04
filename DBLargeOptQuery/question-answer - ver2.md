@@ -1,5 +1,9 @@
 ##  **CÂU HỎI SQL NÂNG CAO (DẠNG TỰ LUẬN + TRUY VẤN THỰC TẾ)**
 
+```sql 
+select * from pg_indexes where schemaname ='public'
+```
+
 ###  SẢN PHẨM VÀ DANH MỤC
 
 1. **Tìm danh sách sản phẩm không có trong bất kỳ đơn hàng nào.**
@@ -478,7 +482,104 @@
 ### PHÂN TÍCH CHUYÊN SÂU
 
 21. **Tìm sản phẩm có tỉ lệ hoàn thành vận chuyển thành công > 95%.**
+   ```sql
+   SELECT
+      p.id,
+      p.name,
+      COUNT(DISTINCT CASE WHEN LOWER(s.shipping_status) = 'delivered' THEN o.id END) AS count_success,
+      COUNT(DISTINCT o.id) AS total_orders,
+      ROUND(
+         COUNT(DISTINCT CASE WHEN LOWER(s.shipping_status) = 'delivered' THEN o.id END) * 1.0 /
+         NULLIF(COUNT(DISTINCT o.id), 0), 4
+      ) AS success_ratio
+   FROM products p
+   JOIN order_items oi ON p.id = oi.product_id
+   JOIN orders o ON oi.order_id = o.id
+   JOIN shippings s ON o.id = s.order_id
+   GROUP BY p.id, p.name
+   HAVING
+      COUNT(DISTINCT CASE WHEN LOWER(s.shipping_status) = 'delivered' THEN o.id END) * 1.0 /
+      NULLIF(COUNT(DISTINCT o.id), 0) > 0.95
+   ORDER BY success_ratio DESC;
+   ```
+   Excution plan:
+   ```
+   Sort  (cost=263.30..264.13) (rows=96) (time=1.966s)
+   └─ Aggregate  (cost=204.35..249.35) (rows=96) (time=1.941s)
+      └─ Sort  (cost=204.35..206.85) (rows=1000) (time=1.433s)
+         └─ Hash Join  (cost=119.50..154.52) (rows=1000) (time=1.207s)
+            ├─ Hash Join  (cost=73.00..94.27) (rows=1000) (time=0.685s)
+            │  ├─ Hash Join  (cost=38.50..57.14) (rows=1000) (time=0.412s)
+            │  │  ├─ Seq Scan on order_items  (cost=0.00..16.00) (rows=1000) (time=0.052s)
+            │  │  └─ Hash  (cost=26.00) (rows=1000)
+            │  │     └─ Seq Scan on products  (cost=0.00..26.00) (rows=1000) (time=0.078s)
+            │  │        └─ Condition: oi.product_id = p.id
+            │  └─ Hash  (cost=22.00) (rows=1000)
+            │     └─ Seq Scan on orders  (cost=0.00..22.00) (rows=1000) (time=0.054s)
+            │        └─ Condition: oi.order_id = o.id
+            └─ Hash  (cost=34.00) (rows=1000)
+               └─ Seq Scan on shippings  (cost=0.00..34.00) (rows=1000) (time=0.076s)
+                  └─ Condition: o.id = s.order_id
+
+   ```
+
+   **Dùng CTE**
+   ```sql
+   WITH product_order_status AS (
+   SELECT
+      oi.product_id,
+      o.id AS order_id,
+      s.shipping_status
+   FROM order_items oi
+   JOIN orders o ON oi.order_id = o.id
+   JOIN shippings s ON o.id = s.order_id
+   ),
+   product_success_rate AS (
+   SELECT
+      pos.product_id,
+      COUNT(DISTINCT pos.order_id) AS total_orders,
+      COUNT(DISTINCT CASE WHEN LOWER(pos.shipping_status) = 'delivered' THEN pos.order_id END) AS count_success
+   FROM product_order_status pos
+   GROUP BY pos.product_id
+   )
+   SELECT
+      p.id,
+      p.name,
+      psr.count_success,
+      psr.total_orders,
+      ROUND(psr.count_success * 1.0 / NULLIF(psr.total_orders, 0), 4) AS success_ratio
+   FROM product_success_rate psr
+   JOIN products p ON p.id = psr.product_id
+   WHERE psr.count_success * 1.0 / NULLIF(psr.total_orders, 0) > 0.95
+   ORDER BY success_ratio DESC;
+   ```
+   excution plan
+   ```
+   Sort  (cost=238.92..239.45) (rows=96) (time=1.637s)
+   └─ Hash Join  (cost=198.91..230.73) (rows=96) (time=1.610s)
+      ├─ Seq Scan on products  (cost=0.00..26.00) (rows=1000) (time=0.070s)
+      └─ Hash  (cost=196.26) (rows=96) (time=1.420s)
+         └─ Subquery Scan psr  (cost=163.22..196.26) (rows=96) (time=1.410s)
+            └─ Aggregate  (cost=163.22..194.14) (rows=96) (time=1.403s)
+               └─ Sort  (cost=163.22..165.72) (rows=1000) (time=0.806s)
+                  └─ Hash Join  (cost=81.00..113.39) (rows=1000) (time=0.622s)
+                     ├─ Hash Join  (cost=34.50..53.14) (rows=1000) (time=0.329s)
+                     │  ├─ Seq Scan on order_items  (cost=0.00..16.00) (rows=1000) (time=0.052s)
+                     │  └─ Hash  (cost=22.00) (rows=1000) (time=0.125s)
+                     │     └─ Seq Scan on orders  (cost=0.00..22.00) (rows=1000) (time=0.056s)
+                     └─ Hash  (cost=34.00) (rows=1000) (time=0.164s)
+                        └─ Seq Scan on shippings  (cost=0.00..34.00) (rows=1000) (time=0.078s)
+   ```
+
 22. **Với mỗi khách hàng, tính trung bình thời gian giao hàng thành công.**
+   ```sql
+   select c.*, avg(EXTRACT(epoch FROM (s.delivery_date - o.order_date)) / 86400) AS avg_days
+   from customers c 
+   join orders o on o.customer_id = c.id
+   join shippings s on s.order_id = o.id
+   where s.shipping_status = 'delivered'
+   group by c.id
+   ```
 23. **Với mỗi sản phẩm, tính tỉ lệ wishlist/đã mua.**
 24. **Tìm top 3 danh mục có tốc độ tăng trưởng đơn hàng nhanh nhất qua từng tháng.**
 25. **Tìm những ngày có doanh thu vượt quá trung bình tháng đó ít nhất 30%.**
